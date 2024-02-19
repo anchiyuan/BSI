@@ -85,7 +85,7 @@ SorLen =  Second*fs;
 
 source = wgn(1, SorLen, 0);
 
-%% RIR mix source (x) %%
+%% RIR mix source 先在時域上 convolution 再做 stft (x and X) %%
 % convolution source and RIR %
 as = zeros(MicNum, points_rir+SorLen-1);
 for i = 1 : MicNum
@@ -94,106 +94,105 @@ end
 
 x = as(:, 1:SorLen);
 
-%% MCN %%
+%% NMCFLMS %%
 % basic parameters %
 L = points_rir;
+total_block = floor((SorLen-2*L)/L)+1;
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-lambda = 0.999;
-step_size = 0.999;
-diaload_delta_h = 0;
-stop_criteria = 1e-8;
+lambda = (1-1/(3*L))^L;    % (1-1/(3*L))^L
+step_size = 0.1;
+dia_load = 0.1;    % mean(x(:, 1:2*L).^2, "all")/5
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-% initialize R %
-R_ini_scalar = 0;
-for i = 1:MicNum
-    R_ini_scalar = R_ini_scalar + flip(x(i, 1:L))*flip(x(i, 1:L)).'/L;
+% basic matrix %
+F_LxL = zeros(L, L);
+for p = 1:L
+    for q = 1:L
+        F_LxL(p, q) = exp(-1j*2*pi*(p-1)*(q-1)/L);
+    end
 end
 
-R = R_ini_scalar*eye(MicNum*L);
+F_2Lx2L = zeros(2*L, 2*L);
+for p = 1:2*L
+    for q = 1:2*L
+        F_2Lx2L(p, q) = exp(-1j*2*pi*(p-1)*(q-1)/(2*L));
+    end
+end
 
-% initialize h_hat %
-h_hat = zeros(MicNum*L, 1);
+W_01_Lx2L = F_LxL*[zeros(L, L), eye(L)]*inv(F_2Lx2L);
+W_10_2LxL = F_2Lx2L*[eye(L), zeros(L, L)].'*inv(F_LxL);
+W_10_Lx2L = F_LxL*[eye(L), zeros(L, L)]*inv(F_2Lx2L);
+W_01_2LxL = F_2Lx2L*[zeros(L, L), eye(L)].'*inv(F_LxL);
+
+% initialize h_hat, h_hat_ul and h_hat_ul_10 %
+h_hat = zeros(MicNum*points_rir, 1);
 for i = 1:MicNum
-    h_hat((i-1)*L+1) = 1;
+    h_hat((i-1)*points_rir+1) = 1;
 end
 
 h_hat = h_hat/norm(h_hat);
+h_hat = reshape(h_hat, [L MicNum]);
 
-% initialize cost function %
-cost_fun = zeros(SorLen, 1);
+h_hat_ul = F_LxL*h_hat;
+h_hat_ul_10 = W_10_2LxL*h_hat_ul;
+
+% initialize e_ul and e_ul_01 %
+e_ul = zeros(MicNum, MicNum, L);
+e_ul_01 = zeros(MicNum, MicNum, 2*L);
+e_mean = zeros(total_block, 1);
+
+% initialize D %
+D = zeros(MicNum, 2*L, 2*L);
+
+% initialize P %
+P = zeros(MicNum, 2*L, 2*L);
 
 % iteration process %
-for n = L+1:SorLen
-    % construct R %
-    R_temp = zeros(MicNum*L, MicNum*L);
-    dia_sum = zeros(L, L);
+for b = 2:total_block
+    % update D %
+    for i = 1:MicNum
+        D(i, :, :) = diag(fft(x(i, (b-1)*L+1:(b-1)*L+2*L).', 2*L));
+    end
+
+    % update e_ul_01 %
     for i = 1:MicNum
         for j = 1:MicNum
-            R_temp((i-1)*L+1:i*L, (j-1)*L+1:j*L) = -(flip(x(j, n-L+1:n)).'*flip(x(i, n-L+1:n)));
-            if i == j
-                dia_sum = dia_sum + flip(x(j, n-L+1:n)).'*flip(x(i, n-L+1:n));
-            end
-
+            e_ul(i, j, :) = W_01_Lx2L*(squeeze(D(i, :, :))*W_10_2LxL*h_hat_ul(:, j)-squeeze(D(j, :, :))*W_10_2LxL*h_hat_ul(:, i));
+            e_ul_01(i, j, :) = W_01_2LxL*squeeze(e_ul(i, j, :));
         end
-
     end
 
+    e_mean(b, 1) = mean(abs(e_ul), 'all');
+
+    % update P %
     for i = 1:MicNum
-        R_temp((i-1)*L+1:i*L, (i-1)*L+1:i*L) = R_temp((i-1)*L+1:i*L, (i-1)*L+1:i*L) + dia_sum;
-    end
-
-    R = lambda*R + R_temp;
-
-    % construct cost function %
-    for i = 1:MicNum-1
-        for j = i+1:MicNum
-            cost_fun(n, :) = cost_fun(n, :) + (flip(x(i, n-L+1:n))*h_hat((j-1)*L+1:j*L, :) - flip(x(j, n-L+1:n))*h_hat((i-1)*L+1:i*L, :))^2;
+        P_accumulate = zeros(2*L, 2*L);
+        for j = 1:MicNum
+            if j ~= i
+                P_accumulate = P_accumulate + squeeze(conj(D(j, :, :)))*squeeze(D(j, :, :));
+            end
         end
 
+        P(i, :, :) = lambda*squeeze(P(i, :, :)) + (1-lambda)*P_accumulate;
     end
 
-    % compute new h_hat %
-    delta_h = inv(R-2*h_hat*(h_hat.')*R-2*R*h_hat*(h_hat.')+diaload_delta_h*eye(MicNum*L))*(R_temp*h_hat-cost_fun(n, :)*h_hat);    % diaload_delta_h*eye(MicNum*L)
-    h_hat = (h_hat-step_size*delta_h)/norm(h_hat-step_size*delta_h);
+    % update h_hat_ul_10 and h_hat_ul %
+    for i = 1:MicNum
+        De_accumulate = zeros(2*L, 1);
+        for j = 1:MicNum
+            De_accumulate = De_accumulate + squeeze(conj(D(j, :, :)))*squeeze(e_ul_01(j, i, :));
+        end
 
-    % stop criteria %
-    cost_mean = mean(cost_fun(n-9:n, :));
-    if cost_mean < stop_criteria
-        break;
+        h_hat_ul_10(:, i) = h_hat_ul_10(:, i) - step_size*inv(squeeze(P(i, :, :)) + dia_load*eye(2*L))*De_accumulate;
+        h_hat_ul(:, i) = W_10_Lx2L*h_hat_ul_10(:, i);
     end
-
+    
 end
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% 中途看波型跟NRMSPM %
-aa = reshape(h_hat, [size(h_hat, 1)/MicNum MicNum]).';
-ratio_aa = zeros(MicNum, 1);
-for i = 1:MicNum
-    ratio_aa(i, :) = max(abs(h(i, :)))/max(abs(aa(i, :)));
-end
 
-aa = aa.*ratio_aa;
 
-look_mic = 1;
-figure(3)
-plot(h(look_mic, :), 'r');
-hold on
-plot(-aa(look_mic, :), 'b');
-hold off
-xlim([1 points_rir])
-legend('ground-truth RIR', 'estimated RIR')
-xlabel('time samples')
-ylabel('amplitude')
-shg
-
-h_NRMSPM = reshape(h.', [MicNum*L 1]);
-aa_NRMSPM = reshape(aa.', [MicNum*L 1]);
-NRMSPM = 20*log(norm(h_NRMSPM-h_NRMSPM.'*aa_NRMSPM/(aa_NRMSPM.'*aa_NRMSPM)*aa_NRMSPM)/norm(h_NRMSPM));
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-% reshape and rescale h_hat %
-h_hat = reshape(h_hat, [size(h_hat, 1)/MicNum MicNum]).';
+h_hat = real((inv(F_LxL)*h_hat_ul).');    % 虛部數值其實是零 (數值問題)
+% rescale h_hat %
 ratio_h_hat = zeros(MicNum, 1);
 for i = 1:MicNum
     ratio_h_hat(i, :) = max(abs(h(i, :)))/max(abs(h_hat(i, :)));
@@ -202,16 +201,16 @@ end
 h_hat = h_hat.*ratio_h_hat;
 
 % 畫圖看結果 %
-figure(4)
-plot(cost_fun(L+1:end, :).');
-xlabel('update times')
-title('cost function')
+figure(3)
+plot(2:1:total_block, e_mean(2:end, :));
+xlabel('update blocks')
+title('error')
 
 look_mic = 1;
-figure(5)
+figure(4)
 plot(h(look_mic, :), 'r');
 hold on
-plot(-h_hat(look_mic, :), 'b');
+plot(h_hat(look_mic, :), 'b');
 hold off
 xlim([1 points_rir])
 legend('ground-truth RIR', 'estimated RIR')
@@ -231,8 +230,8 @@ end
 ME = sum_norm/MicNum;
 
 % NRMSPM %
-h_NRMSPM = reshape(h.', [MicNum*L 1]);
-h_hat_NRMSPM = reshape(h_hat.', [MicNum*L 1]);
+h_NRMSPM = reshape(h.', [MicNum*points_rir 1]);
+h_hat_NRMSPM = reshape(h_hat.', [MicNum*points_rir 1]);
 NRMSPM = 20*log(norm(h_NRMSPM-h_NRMSPM.'*h_hat_NRMSPM/(h_hat_NRMSPM.'*h_hat_NRMSPM)*h_hat_NRMSPM)/norm(h_NRMSPM));
 
 toc

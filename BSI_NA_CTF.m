@@ -35,7 +35,7 @@ orientation = 0;                                         % Microphone orientatio
 hp_filter = 1;                                           % Disable high-pass filter
 
 % 畫空間圖 %
-figure(5);
+figure(1);
 plot3( [0 room_dim(1, 1) room_dim(1, 1) 0 0 0 room_dim(1, 1) room_dim(1, 1) 0 0 room_dim(1, 1) room_dim(1, 1) 0 0 room_dim(1, 1) room_dim(1, 1)], ...
        [0 0 room_dim(1, 2) room_dim(1, 2) 0 0 0 room_dim(1, 2) room_dim(1, 2) room_dim(1, 2) room_dim(1, 2) room_dim(1, 2) room_dim(1, 2) 0 0 0], ...
        [0 0 0 0 0 room_dim(1, 3) room_dim(1, 3) room_dim(1, 3) room_dim(1, 3) 0 0 room_dim(1, 3) room_dim(1, 3) room_dim(1, 3) room_dim(1, 3) 0] , 'k')
@@ -66,7 +66,7 @@ look_mic = 1;
 h_yaxis_upperlimit = max(h(look_mic, :)) + 0.01;
 h_yaxis_underlimit = min(h(look_mic, :)) - 0.01;
 % 畫 ground-truth RIR time plot %
-figure(1)
+figure(2)
 plot(h(look_mic, :), 'r');
 xlim([1 points_rir])
 ylim([h_yaxis_underlimit h_yaxis_upperlimit])
@@ -201,13 +201,13 @@ end
 h_hat = h_hat(:, hopsize*(osfac-1)+1:end).*ratio_h_hat;
 
 % 畫圖看結果 %
-figure(2)
+figure(3)
 plot(cost_fun(1, 2*L+1:end));
 xlabel('update times')
 title('cost function')
 
 look_mic = 1;
-figure(3)
+figure(4)
 plot(h(look_mic, :), 'r');
 hold on
 plot(h_hat(look_mic, :), 'b');
