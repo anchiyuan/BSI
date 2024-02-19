@@ -92,8 +92,6 @@ for i = 1 : MicNum
     as(i, :) = conv(h(i, :), source);
 end
 
-x = as(:, 1:SorLen);
-
 % window parameters %
 NFFT = 64;
 hopsize = 16;
@@ -104,12 +102,17 @@ osfac = round(NFFT/hopsize);
 frequency = NFFT/2 + 1;
 L = length(hopsize:hopsize:points_rir+2*NFFT-2);
 
-[X, ~, ~] = stft(x.', fs, Window=win, OverlapLength=NFFT-hopsize, FFTLength=NFFT, FrequencyRange='onesided');
+% delay as %
+extra_delay_x = (ceil(NFFT/hopsize) - 1)*hopsize;    % put delay for equilization between time convolution and CTF 
+x_delay = zeros(MicNum, SorLen);
+x_delay(:, extra_delay_x+1:end) = as(:, 1:SorLen-extra_delay_x);
 
+% STFT %
+[X, ~, ~] = stft(x_delay.', fs, Window=win, OverlapLength=NFFT-hopsize, FFTLength=NFFT, FrequencyRange='onesided');
 NumOfFrame = size(X, 2);
 NumOfFrame_vector = 1:1:NumOfFrame;
 
-%% MCCTFN %%
+%% NMCCTFLMS %%
 % basic parameters %
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 lambda = 0.999;
@@ -128,7 +131,7 @@ for n = 1:frequency
     % initialize R %
     R_ini_scalar = 0;
     for i = 1:MicNum
-        R_ini_scalar = R_ini_scalar + flip(conj(X(n, L+1:2*L, i)))*flip(X(n, L+1:2*L, i)).'/L;
+        R_ini_scalar = R_ini_scalar + flip(conj(X(n, L:2*L-1, i)))*flip(X(n, L:2*L-1, i)).'/L;    % X 要到第 L-osfac 個 frame 才能用
     end
 
     R = R_ini_scalar*eye(MicNum*L);
@@ -145,7 +148,7 @@ for n = 1:frequency
     weight = weight/norm(weight);
     
     % iteration process %
-    for FrameNo = 2*L+1:NumOfFrame
+    for FrameNo = 2*L:NumOfFrame
         % update R %
         R_temp = zeros(MicNum*L, MicNum*L);
         dia_sum = zeros(L, L);
@@ -202,7 +205,7 @@ h_hat = h_hat(:, hopsize*(osfac-1)+1:end).*ratio_h_hat;
 
 % 畫圖看結果 %
 figure(3)
-plot(cost_fun(1, 2*L+1:end));
+plot(mean(cost_fun(:, 2*L:end)));
 xlabel('update times')
 title('cost function')
 
