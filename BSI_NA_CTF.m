@@ -116,8 +116,8 @@ NumOfFrame_vector = 1:1:NumOfFrame;
 % basic parameters %
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 lambda = 0.999;
-step_size = 0.999;
-diaload_delta_weight = 1e-5;
+step_size = 0.9999;
+diaload_delta_weight = 1e-7;
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 % initialize H_hat %
