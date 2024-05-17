@@ -7,7 +7,7 @@ function source_MINT = MINT(a, y, g_len, weight_len, dia_load)
 
 g = a(:, 1:g_len);
 %%%%%%%%%%%%%%%%%%% can change %%%%%%%%%%%%%%%%%%%
-mic_choose = [30, 22, 28, 19, 13, 6];
+mic_choose = [4, 1, 6, 3, 5, 2];
 num_channel = 6;
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 g_choose = g(mic_choose, :);

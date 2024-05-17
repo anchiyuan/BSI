@@ -13,7 +13,7 @@ fs = 16000;                                              % Sample frequency (sam
 Ts = 1/fs;                                               % Sample period (s)
 
 % ULA %
-MicStart = [0.1, 0.1, 0.2];
+MicStart = [1, 1, 1];
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 spacing = 0.02;
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -22,11 +22,11 @@ for i = 1:MicNum
     MicPos(i, :) = [MicStart(1, 1)+(i-1)*spacing, MicStart(1, 2), MicStart(1, 3)];
 end
 
-SorPos = [0.2, 0.3, 0.2];                                % source position (m)
-room_dim = [0.3, 0.4, 0.3];                              % Room dimensions [x y z] (m)
+SorPos = [2, 2.4, 1];                                % source position (m)
+room_dim = [3, 3, 2.5];                              % Room dimensions [x y z] (m)
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-reverberation_time = 0.009;                               % Reverberation time (s)
-points_rir = 256;                                        % Number of rir points (需比 reverberation time 還長)
+reverberation_time = 0.1;                               % Reverberation time (s)
+points_rir = 1024;                                        % Number of rir points (需比 reverberation time 還長)
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 mtype = 'omnidirectional';                               % Type of microphone
 order = -1;                                              % -1 equals maximum reflection order!
@@ -51,11 +51,11 @@ title('空間圖')
 shg
 
 %% generate ground-truth RIR (h) %%
-% 產生 RIR 和存.mat 檔 %
-h = rir_generator(c, fs, MicPos, SorPos, room_dim, reverberation_time, points_rir, mtype, order, dim, orientation, hp_filter);
-rir_filename_str = ['h\h_', string(reverberation_time), 'x', string(MicNum), 'x', string(points_rir), '.mat'];
-rir_filemane = join(rir_filename_str, '');
-save(rir_filemane, 'h')
+% % 產生 RIR 和存.mat 檔 %
+% h = rir_generator(c, fs, MicPos, SorPos, room_dim, reverberation_time, points_rir, mtype, order, dim, orientation, hp_filter);
+% rir_filename_str = ['h\h_', string(reverberation_time), 'x', string(MicNum), 'x', string(points_rir), '.mat'];
+% rir_filemane = join(rir_filename_str, '');
+% save(rir_filemane, 'h')
 
 % load RIR 的 .mat 檔 %
 rir_filename_str = ['h\h_', string(reverberation_time), 'x', string(MicNum), 'x', string(points_rir), '.mat'];
@@ -189,7 +189,7 @@ shg
 
 h_NRMSPM = reshape(h.', [MicNum*L 1]);
 aa_NRMSPM = reshape(aa.', [MicNum*L 1]);
-NRMSPM = 20*log(norm(h_NRMSPM-h_NRMSPM.'*aa_NRMSPM/(aa_NRMSPM.'*aa_NRMSPM)*aa_NRMSPM)/norm(h_NRMSPM));
+NRMSPM = 20*log10(norm(h_NRMSPM-h_NRMSPM.'*aa_NRMSPM/(aa_NRMSPM.'*aa_NRMSPM)*aa_NRMSPM)/norm(h_NRMSPM));
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 % reshape and rescale h_hat %
@@ -219,20 +219,40 @@ xlabel('time samples')
 ylabel('amplitude')
 shg
 
-% ME %
+%  算 NRMSPM %
+h_NRMSPM = reshape(h.', [MicNum*points_rir 1]);
+aa_NRMSPM = reshape(h_hat.', [MicNum*points_rir 1]);
+NRMSPM = 20*log10(norm(h_NRMSPM-h_NRMSPM.'*aa_NRMSPM/(aa_NRMSPM.'*aa_NRMSPM)*aa_NRMSPM)/norm(h_NRMSPM));
+
+% estimated RIR and absolute error plot %
+h_yaxis_upperlimit = max(h(look_mic, :)) + 0.01;
+h_yaxis_underlimit = min(h(look_mic, :)) - 0.01;
 ATF = fft(h, points_rir, 2);
 ATF_estimated = fft(h_hat, points_rir, 2);
-sum_norm = 0;
-for i  = 1:MicNum
-    norm_ATF = norm(ATF(i, :) - ATF_estimated(i, :));
-    sum_norm = sum_norm + norm_ATF;
-end
 
-ME = sum_norm/MicNum;
+figure(6)
+subplot(2, 1, 1);
+plot(h(look_mic, :), 'r');
+hold on
+plot(-h_hat(look_mic, :), 'b');
+hold off
+ylim([h_yaxis_underlimit h_yaxis_upperlimit])
+xlim([1 points_rir])
+legend('ground-truth RIR', 'estimated RIR')
+xlabel('time samples')
+ylabel('RIR')
 
-% NRMSPM %
-h_NRMSPM = reshape(h.', [MicNum*L 1]);
-h_hat_NRMSPM = reshape(h_hat.', [MicNum*L 1]);
-NRMSPM = 20*log(norm(h_NRMSPM-h_NRMSPM.'*h_hat_NRMSPM/(h_hat_NRMSPM.'*h_hat_NRMSPM)*h_hat_NRMSPM)/norm(h_NRMSPM));
+subplot(2, 1, 2);
+plot(linspace(0, fs/2, points_rir/2+1), abs(ATF(look_mic, 1:points_rir/2+1) - ATF_estimated(look_mic, 1:points_rir/2+1)));
+ylim([0 2])
+xlabel('frequency (Hz)')
+ylabel('absolute error')
+shg
+
+% save fig %
+algorithm = 'MCLMS';
+fig_filename_str = ['fig\fig_', string(reverberation_time), 'x', algorithm, '.fig'];
+fig_filename = join(fig_filename_str, '');
+savefig(fig_filename)
 
 toc
