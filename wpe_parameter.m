@@ -14,7 +14,7 @@
 
 fs    = 16000;     %% Sampling frequency
 
-num_mic = 6;       %% Number of channels
+num_mic = 18;       %% Number of channels
 
 num_out = num_mic; %% Number of outputs (should be <= microphones).
 		   %% set to 1 if output a single channel 
@@ -43,7 +43,7 @@ analy_param = struct('win_size'  , 512, ...
 %% channel_setup = [10, 6;
 %%                 3, 3;
 %%                 500, inf]
-channel_setup = [3; ...
+channel_setup = [1; ...
 		 1; ...
 		 inf];
 

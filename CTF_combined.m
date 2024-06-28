@@ -8,35 +8,39 @@ tic
 
 %% RIR parameter %%
 SorNum = 1;                                              % source number
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-MicNum = 6;                                             % number of microphone
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+MicNum_TDOA = 8;                                         % TDOA麥克風數量
+MicNum = 18;                                             % number of microphone
 c = 343;                                                 % Sound velocity (m/s)
 fs = 16000;                                              % Sample frequency (samples/s)
-Ts = 1/fs;                                               % Sample period (s)
 
-% ULA %
-MicStart = [1, 1, 1];
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% distributed 8 mic %
+mic_x = [ 10 ; 30 ; 30 ; 10 ; 10 ; 30 ; 30 ; 10 ]./100;
+mic_y = [ 10 ; 10 ; 20 ; 20 ; 10 ; 10 ; 20 ; 20 ]./100;
+mic_z = [ 10 ; 10 ; 10 ; 10 ; 15 ; 15 ; 15 ; 15 ]./100;
+MicPos = [mic_x, mic_y, mic_z,];
+
+% ULA 30 mics %
+MicStart = [11, 10, 10]/100;
 spacing = 0.02;
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-MicPos = zeros(MicNum, 3);
-for i = 1:MicNum
-    MicPos(i, :) = [MicStart(1, 1)+(i-1)*spacing, MicStart(1, 2), MicStart(1, 3)];
+for i = MicNum_TDOA+1:MicNum
+    MicPos(i, :) = [MicStart(1, 1)+(i-(MicNum_TDOA+1))*spacing, MicStart(1, 2), MicStart(1, 3)];
 end
 
-SorPos = [2, 2.4, 1];                                % source position (m)
-room_dim = [3, 3, 2.5];                              % Room dimensions [x y z] (m)
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-reverberation_time = 0.1;                               % Reverberation time (s)
-points_rir = 1024;                                        % Number of rir points (需比 reverberation time 還長)
-look_mic = 1;
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+SorPos = [17, 16, 13]/100;                            % source position (m)
+room_dim = [ 40, 30, 30]/100;                          % Room dimensions [x y z] (m)
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+reverberation_time = 0.01;                                % Reverberation time (s)
+points_rir = 256;                                       % Number of rir points (需比 reverberation time 還長)
+look_mic = 18;
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 mtype = 'omnidirectional';                               % Type of microphone
 order = -1;                                              % -1 equals maximum reflection order!
 dim = 3;                                                 % Room dimension
 orientation = 0;                                         % Microphone orientation (rad)
 hp_filter = 1;                                           % Disable high-pass filter
+
+referencce_point = MicPos(1, :);
+sorpos_groundtruth = SorPos - referencce_point;
 
 % 畫空間圖 %
 figure(1);
@@ -55,52 +59,36 @@ title('空間圖')
 shg
 
 %% load ground-truth RIR (h) %%
-% % 產生 RIR 和存.mat 檔 %
-% h = rir_generator(c, fs, MicPos, SorPos, room_dim, reverberation_time, points_rir, mtype, order, dim, orientation, hp_filter);
-% rir_filename_str = ['h\h_', string(reverberation_time), 'x', string(MicNum), 'x', string(points_rir), '.mat'];
-% rir_filemane = join(rir_filename_str, '');
-% save(rir_filemane, 'h')
+% 產生 RIR 和存.mat 檔 %
+h = rir_generator(c, fs, MicPos, SorPos, room_dim, reverberation_time, points_rir, mtype, order, dim, orientation, hp_filter);
+rir_filename_str = ['h\h_', string(reverberation_time), 'x', string(MicNum), 'x', string(points_rir), '.mat'];
+rir_filemane = join(rir_filename_str, '');
+save(rir_filemane, 'h')
 
-% load RIR 的 .mat 檔 %
 rir_filename_str = ['h\h_', string(reverberation_time), 'x', string(MicNum), 'x', string(points_rir), '.mat'];
 rir_filemane = join(rir_filename_str, '');
 load(rir_filemane)
 
-h_yaxis_upperlimit = max(h(look_mic, :)) + 0.01;
-h_yaxis_underlimit = min(h(look_mic, :)) - 0.01;
-% 畫 ground-truth RIR time plot %
-figure(2)
-plot(h(look_mic, :), 'r');
-xlim([1 points_rir])
-ylim([h_yaxis_underlimit h_yaxis_upperlimit])
-title('h')
-xlabel('points')
-ylabel('amplitude')
-shg
-
-%% window parameters %%
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-NFFT = 256;
-hopsize = 64;
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% window parameter %%
+NFFT = 1024;
+hopsize = 256;
 
 win = hamming(NFFT);
 osfac = round(NFFT/hopsize);
 
 frequency = NFFT/2 + 1;
-L = length(hopsize:hopsize:points_rir+2*NFFT-2);
+L = length(hopsize:hopsize:points_rir+2*NFFT-2);    % (len(win) + len(win) - 1) + points_rir - 1
+freqs_vector = linspace(0, fs/2, frequency);
 
 %% 讀音檔 (source) %%
 Second = 23;
 SorLen =  Second*fs;
 
-% load source %
-% [source_transpose, fs] = audioread('245.wav', [1, SorLen]);
-% source = source_transpose.';
+% load speech source %
+[source_transpose, fs] = audioread('245.wav', [1, SorLen]);
+source = source_transpose.';
 
-source = wgn(1, SorLen, 0);
-
-%% RIR mix source 先在時域上 convolution 再做 stft (y_delay y_nodelay Y_delay) %%
+%% 產生麥克風訊號，先在時域上 convolution 再做 stft (y_nodelay y_delay Y_delay ) %%
 % convolution source and RIR %
 as = zeros(MicNum, points_rir+SorLen-1);
 for i = 1 : MicNum
@@ -112,36 +100,87 @@ y_delay = zeros(MicNum, SorLen);
 y_delay(:, extra_delay_y+1:end) = as(:, 1:SorLen-extra_delay_y);
 y_nodelay = as(:, 1:SorLen);
 
-% y 轉頻域 %
+% y_delay 轉頻域 %
 y_delay_transpose = y_delay.';
 [Y_delay, ~, ~] = stft(y_delay_transpose, fs, Window=win, OverlapLength=NFFT-hopsize, FFTLength=NFFT, FrequencyRange='onesided');
 NumOfFrame = size(Y_delay, 2);
 
-%% load y_wpe %%
-% do wpe %
-y_wpe = wpe(y_nodelay.', 'wpe_parameter.m');
-y_wpe = y_wpe.';
+%% TDOA localization %%
+% GCC-PHAT for delay estimation %
+delay = zeros(MicNum_TDOA-1, 1);
+difference = zeros(MicNum_TDOA-1, 1);
+for i = 1:MicNum_TDOA-1
+    delay(i, :) = gccphat(y_nodelay(i+1,:).', y_nodelay(1,:).', fs);
+    difference(i, :) = delay(i, :)*c;
+end
 
-% 存 wpe mat %
-y_wpe_filename_str = ['y\y_wpe_', string(reverberation_time), '.mat'];
-y_wpe_filename = join(y_wpe_filename_str, '');
-save(y_wpe_filename, 'y_wpe')
+% mics position with repect to reference point %
+micpos = [mic_x, mic_y, mic_z,] - referencce_point;
+
+% generate parameters matrix %
+A = 2*[micpos(2:end, :), difference];
+b = micpos(2:end, 1).^2 + micpos(2:end, 2).^2 + micpos(2:end, 3).^2 - difference.^2;
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+sigma = 0.01;
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+psi = 4*sigma^2*(ones(MicNum_TDOA-1, 1)*ones(MicNum_TDOA-1, 1).' + eye(MicNum_TDOA-1))*difference*difference.';
+dia_load_psi = 1;
+invpsi = inv(psi+dia_load_psi*eye(MicNum_TDOA-1)); 
+P = [1 0 0 0;0 1 0 0;0 0 1 0;0 0 0 -1];
+
+% find possible root %
+syms Z
+theta = pinv(A.'*invpsi*A+Z*P )*(A.'*invpsi*b);
+I = theta.'*P*theta;
+[num, den] = numden(I);
+poly = sym2poly(num);
+roots = roots(poly);
+roots_real = roots(imag(roots)==0, :);    % 取只有實數的根
+if isempty(roots_real)
+    roots_real = [roots_real; 0];
+end
+
+% find actual root from posible root %
+if size(roots_real, 1) > 1
+    theta = zeros(4, size(roots_real, 1));
+    costfun = zeros(size(roots_real, 1), 1);
+    for i = 1:size(roots_real, 1)
+        theta(:, i) = pinv(A.'*invpsi*A+roots_real(i, :)*P )*(A.'*invpsi*b);
+        costfun(i, :) = (A*theta(:, i)-b).'*invpsi*(A*theta(:, i)-b);
+    end
+
+    [~, min_index] = min(costfun);
+    sorpos_estimation = theta(1:3, min_index).';
+else
+    theta = pinv(A.'*invpsi*A+roots_real*P )*(A.'*invpsi*b);
+    sorpos_estimation = theta(1:3, :).';
+end
+
+%% load y_wpe (y_wpe) %%
+% % do wpe %
+% y_wpe = wpe(y_nodelay.', 'wpe_parameter.m');
+% y_wpe = y_wpe.';
+% 
+% % 存 wpe mat %
+% y_wpe_filename_str = ['y\y_wpe_', string(reverberation_time), '.mat'];
+% y_wpe_filename = join(y_wpe_filename_str, '');
+% save(y_wpe_filename, 'y_wpe')
 
 % load y_wpe %
 y_wpe_filename_str = ['y\y_wpe_', string(reverberation_time), '.mat'];
 y_wpe_filename = join(y_wpe_filename_str, '');
 load(y_wpe_filename);
 
-%% DAS beamformer %%
+
+%% DAS beamformer (Y_DAS) %%
 % 算 mic 與 source 之距離 %
 distance = zeros(MicNum, SorNum);
 for i = 1 : MicNum
-    distance(i, :) =  sqrt(sum((SorPos - MicPos(i, :)).^2));
+    distance(i, :) =  sqrt(sum((SorPos - MicPos(i, :)).^2));    % 其實應該用sorpos_estimation+referencce_point 不過差不到一公分
 end
 
 % 算 a %
 a = zeros(MicNum, SorNum, frequency);
-freqs_vector = linspace(0, fs/2, frequency);
 for n = 1:frequency
     omega = 2*pi*freqs_vector(n);
     a(:, :, n) = exp(-1j*omega/c*distance)./distance;
@@ -216,14 +255,14 @@ h_NRMSPM = reshape(h.', [MicNum*points_rir 1]);
 aa_NRMSPM = reshape(A_tdomain.', [MicNum*points_rir 1]);
 NRMSPM_Wiener = 20*log10(norm(h_NRMSPM-h_NRMSPM.'*aa_NRMSPM/(aa_NRMSPM.'*aa_NRMSPM)*aa_NRMSPM)/norm(h_NRMSPM));
 
-% estimated RIR and absolute error plot %
+% plot and save estimated RIR and ATF fig %
+algorithm = 'Wiener';
 h_yaxis_upperlimit = max(h(look_mic, :)) + 0.01;
 h_yaxis_underlimit = min(h(look_mic, :)) - 0.01;
 ATF = fft(h, points_rir, 2);
 ATF_estimated = fft(A_tdomain, points_rir, 2);
 
-figure(3)
-subplot(2, 1, 1);
+figure(1)
 plot(h(look_mic, :), 'r');
 hold on
 plot(A_tdomain(look_mic, :), 'b');
@@ -234,28 +273,39 @@ legend('ground-truth RIR', 'estimated RIR')
 xlabel('time samples')
 ylabel('RIR')
 
-subplot(2, 1, 2);
-plot(linspace(0, fs/2, points_rir/2+1), abs(ATF(look_mic, 1:points_rir/2+1) - ATF_estimated(look_mic, 1:points_rir/2+1)));
-ylim([0 2])
-xlabel('frequency (Hz)')
-ylabel('absolute error')
-shg
-
-% save A and fig %
-algorithm = 'Wiener';
-A_filename_str = ['A\A_', string(reverberation_time), 'x', algorithm, '.mat'];
-A_filename = join(A_filename_str, '');
-save(A_filename, 'A')
-
-fig_filename_str = ['fig\fig_', string(reverberation_time), 'x', algorithm, '.fig'];
+fig_filename_str = ['fig\CTF_combined_', string(reverberation_time), 'x', algorithm, '_RIR.fig'];
 fig_filename = join(fig_filename_str, '');
 savefig(fig_filename)
 
-% MINT %
-g_len = floor(points_rir/100)/4*300;
-weight_len = floor(g_len/4);
-dia_load_MINT = 10^(-7);
-source_MINT_Wiener = MINT(A_tdomain, y_nodelay, g_len, weight_len, dia_load_MINT);
+figure(2)
+subplot(2, 1, 1);
+semilogx(linspace(0, fs/2, points_rir/2+1), 20*log10(abs(ATF(look_mic, 1:points_rir/2+1))), 'r');
+hold on
+semilogx(linspace(0, fs/2, points_rir/2+1), 20*log10(abs(ATF_estimated(look_mic, 1:points_rir/2+1))), 'b');
+hold off
+xlim([200 8000])
+legend('ground-truth ATF', 'estimated ATF')
+xlabel('frequency (Hz)')
+ylabel('dB')
+
+subplot(2, 1, 2);
+semilogx(linspace(0, fs/2, points_rir/2+1), unwrap(angle(ATF(look_mic, 1:points_rir/2+1))), 'r');
+hold on
+semilogx(linspace(0, fs/2, points_rir/2+1), unwrap(angle(ATF_estimated(look_mic, 1:points_rir/2+1))), 'b');
+hold off
+xlim([200 8000])
+legend('ground-truth ATF', 'estimated ATF')
+xlabel('frequency (Hz)')
+ylabel('phase (radius)')
+
+fig_filename_str = ['fig\CTF_combined_', string(reverberation_time), 'x', algorithm, '_ATF.fig'];
+fig_filename = join(fig_filename_str, '');
+savefig(fig_filename)
+
+% save A_tdomain %
+A_filename_str = ['A_tdomain\CTF_combined_', string(reverberation_time), 'x', algorithm, '_A_tdomain.mat'];
+A_filename = join(A_filename_str, '');
+save(A_filename, 'A_tdomain')
 
 %% RLS %%
 start_ini_frame = L;
@@ -300,14 +350,14 @@ h_NRMSPM = reshape(h.', [MicNum*points_rir 1]);
 aa_NRMSPM = reshape(A_tdomain.', [MicNum*points_rir 1]);
 NRMSPM_RLS = 20*log10(norm(h_NRMSPM-h_NRMSPM.'*aa_NRMSPM/(aa_NRMSPM.'*aa_NRMSPM)*aa_NRMSPM)/norm(h_NRMSPM));
 
-% estimated RIR and absolute error plot %
+% plot and save estimated RIR and ATF fig %
+algorithm = 'RLS';
 h_yaxis_upperlimit = max(h(look_mic, :)) + 0.01;
 h_yaxis_underlimit = min(h(look_mic, :)) - 0.01;
 ATF = fft(h, points_rir, 2);
 ATF_estimated = fft(A_tdomain, points_rir, 2);
 
-figure(4)
-subplot(2, 1, 1);
+figure(3)
 plot(h(look_mic, :), 'r');
 hold on
 plot(A_tdomain(look_mic, :), 'b');
@@ -318,28 +368,39 @@ legend('ground-truth RIR', 'estimated RIR')
 xlabel('time samples')
 ylabel('RIR')
 
-subplot(2, 1, 2);
-plot(linspace(0, fs/2, points_rir/2+1), abs(ATF(look_mic, 1:points_rir/2+1) - ATF_estimated(look_mic, 1:points_rir/2+1)));
-ylim([0 2])
-xlabel('frequency (Hz)')
-ylabel('absolute error')
-shg
-
-% save A %
-algorithm = 'RLS';
-A_filename_str = ['A\A_', string(reverberation_time), 'x', algorithm, '.mat'];
-A_filename = join(A_filename_str, '');
-save(A_filename, 'A')
-
-fig_filename_str = ['fig\fig_', string(reverberation_time), 'x', algorithm, '.fig'];
+fig_filename_str = ['fig\CTF_combined_', string(reverberation_time), 'x', algorithm, '_RIR.fig'];
 fig_filename = join(fig_filename_str, '');
 savefig(fig_filename)
 
-% MINT %
-g_len = floor(points_rir/100)/4*300;
-weight_len = floor(g_len/4);
-dia_load_MINT = 10^(-7);
-source_MINT_RLS = MINT(A_tdomain, y_nodelay, g_len, weight_len, dia_load_MINT);
+figure(4)
+subplot(2, 1, 1);
+semilogx(linspace(0, fs/2, points_rir/2+1), 20*log10(abs(ATF(look_mic, 1:points_rir/2+1))), 'r');
+hold on
+semilogx(linspace(0, fs/2, points_rir/2+1), 20*log10(abs(ATF_estimated(look_mic, 1:points_rir/2+1))), 'b');
+hold off
+xlim([200 8000])
+legend('ground-truth ATF', 'estimated ATF')
+xlabel('frequency (Hz)')
+ylabel('dB')
+
+subplot(2, 1, 2);
+semilogx(linspace(0, fs/2, points_rir/2+1), unwrap(angle(ATF(look_mic, 1:points_rir/2+1))), 'r');
+hold on
+semilogx(linspace(0, fs/2, points_rir/2+1), unwrap(angle(ATF_estimated(look_mic, 1:points_rir/2+1))), 'b');
+hold off
+xlim([200 8000])
+legend('ground-truth ATF', 'estimated ATF')
+xlabel('frequency (Hz)')
+ylabel('phase (radius)')
+
+fig_filename_str = ['fig\CTF_combined_', string(reverberation_time), 'x', algorithm, '_ATF.fig'];
+fig_filename = join(fig_filename_str, '');
+savefig(fig_filename)
+
+% save A_tdomain %
+A_filename_str = ['A_tdomain\CTF_combined_', string(reverberation_time), 'x', algorithm, '_A_tdomain.mat'];
+A_filename = join(A_filename_str, '');
+save(A_filename, 'A_tdomain')
 
 %% Kalman filter %%
 start_ini_frame = L;
@@ -385,14 +446,14 @@ h_NRMSPM = reshape(h.', [MicNum*points_rir 1]);
 aa_NRMSPM = reshape(A_tdomain.', [MicNum*points_rir 1]);
 NRMSPM_Kalman = 20*log10(norm(h_NRMSPM-h_NRMSPM.'*aa_NRMSPM/(aa_NRMSPM.'*aa_NRMSPM)*aa_NRMSPM)/norm(h_NRMSPM));
 
-% estimated RIR and absolute error plot %
+% plot and save estimated RIR and ATF fig %
+algorithm = 'Kalman';
 h_yaxis_upperlimit = max(h(look_mic, :)) + 0.01;
 h_yaxis_underlimit = min(h(look_mic, :)) - 0.01;
 ATF = fft(h, points_rir, 2);
 ATF_estimated = fft(A_tdomain, points_rir, 2);
 
 figure(5)
-subplot(2, 1, 1);
 plot(h(look_mic, :), 'r');
 hold on
 plot(A_tdomain(look_mic, :), 'b');
@@ -403,59 +464,39 @@ legend('ground-truth RIR', 'estimated RIR')
 xlabel('time samples')
 ylabel('RIR')
 
-subplot(2, 1, 2);
-plot(linspace(0, fs/2, points_rir/2+1), abs(ATF(look_mic, 1:points_rir/2+1) - ATF_estimated(look_mic, 1:points_rir/2+1)));
-ylim([0 2])
-xlabel('frequency (Hz)')
-ylabel('absolute error')
-shg
-
-% save A %
-algorithm = 'Kalman';
-A_filename_str = ['A\A_', string(reverberation_time), 'x', algorithm, '.mat'];
-A_filename = join(A_filename_str, '');
-save(A_filename, 'A')
-
-fig_filename_str = ['fig\fig_', string(reverberation_time), 'x', algorithm, '.fig'];
+fig_filename_str = ['fig\CTF_combined_', string(reverberation_time), 'x', algorithm, '_RIR.fig'];
 fig_filename = join(fig_filename_str, '');
 savefig(fig_filename)
 
-% MINT %
-g_len = floor(points_rir/100)/4*300;
-weight_len = floor(g_len/4);
-dia_load_MINT = 10^(-7);
-source_MINT_Kalman = MINT(A_tdomain, y_nodelay, g_len, weight_len, dia_load_MINT);
+figure(6)
+subplot(2, 1, 1);
+semilogx(linspace(0, fs/2, points_rir/2+1), 20*log10(abs(ATF(look_mic, 1:points_rir/2+1))), 'r');
+hold on
+semilogx(linspace(0, fs/2, points_rir/2+1), 20*log10(abs(ATF_estimated(look_mic, 1:points_rir/2+1))), 'b');
+hold off
+xlim([200 8000])
+legend('ground-truth ATF', 'estimated ATF')
+xlabel('frequency (Hz)')
+ylabel('dB')
 
-%% save .wav 檔 %%
-point_start_save = 18*fs;
-source_max  = max(abs(source(1, point_start_save:end)));
-source_MINT_Wiener_max  = max(abs(source_MINT_Wiener(1, point_start_save:end)));
-source_MINT_RLS_max  = max(abs(source_MINT_RLS(1, point_start_save:end)));
-source_MINT_Kalman_max  = max(abs(source_MINT_Kalman(1, point_start_save:end)));
+subplot(2, 1, 2);
+semilogx(linspace(0, fs/2, points_rir/2+1), unwrap(angle(ATF(look_mic, 1:points_rir/2+1))), 'r');
+hold on
+semilogx(linspace(0, fs/2, points_rir/2+1), unwrap(angle(ATF_estimated(look_mic, 1:points_rir/2+1))), 'b');
+hold off
+xlim([200 8000])
+legend('ground-truth ATF', 'estimated ATF')
+xlabel('frequency (Hz)')
+ylabel('phase (radius)')
 
-audiowrite('wav\source.wav', source(1, point_start_save:end)/source_max, fs)
+fig_filename_str = ['fig\CTF_combined_', string(reverberation_time), 'x', algorithm, '_ATF.fig'];
+fig_filename = join(fig_filename_str, '');
+savefig(fig_filename)
 
-ratio_y_nodelay = 0.8 / max(abs(y_nodelay(look_mic, point_start_save:end))) ;
-y_filemane_str = ['wav\y_nodelay_partial_', string(reverberation_time), '.wav'];
-y_filemane = join(y_filemane_str, '');
-audiowrite(y_filemane, y_nodelay(look_mic, point_start_save:end)*ratio_y_nodelay, fs)
-
-ratio_y_wpe = 0.8 / max(abs(y_wpe(look_mic, point_start_save:end))) ;
-y_filemane_str = ['wav\y_wpe_partial_', string(reverberation_time), '.wav'];
-y_filemane = join(y_filemane_str, '');
-audiowrite(y_filemane, y_wpe(look_mic, point_start_save:end)*ratio_y_wpe, fs)
-
-source_MINT_filemane_str = ['wav\source_predict_partial_Wiener_MINT_', string(reverberation_time), '.wav'];
-source_MINT_filemane = join(source_MINT_filemane_str, '');
-audiowrite(source_MINT_filemane, source_MINT_Wiener(1, point_start_save:end)/source_MINT_Wiener_max, fs)
-
-source_MINT_filemane_str = ['wav\source_predict_partial_RLS_MINT_', string(reverberation_time), '.wav'];
-source_MINT_filemane = join(source_MINT_filemane_str, '');
-audiowrite(source_MINT_filemane, source_MINT_RLS(1, point_start_save:end)/source_MINT_RLS_max, fs)
-
-source_MINT_filemane_str = ['wav\source_predict_partial_Kalman_MINT_', string(reverberation_time), '.wav'];
-source_MINT_filemane = join(source_MINT_filemane_str, '');
-audiowrite(source_MINT_filemane, source_MINT_Kalman(1, point_start_save:end)/source_MINT_Kalman_max, fs)
+% save A_tdomain %
+A_filename_str = ['A_tdomain\CTF_combined_', string(reverberation_time), 'x', algorithm, '_A_tdomain.mat'];
+A_filename = join(A_filename_str, '');
+save(A_filename, 'A_tdomain')
 
 fprintf('done\n')
 
