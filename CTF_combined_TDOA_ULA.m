@@ -14,23 +14,23 @@ c = 343;                                                 % Sound velocity (m/s)
 fs = 16000;                                              % Sample frequency (samples/s)
 
 % distributed 8 mic %
-mic_x = [ 10 ; 30 ; 30 ; 10 ; 10 ; 30 ; 30 ; 10 ]./100;
-mic_y = [ 10 ; 10 ; 20 ; 20 ; 10 ; 10 ; 20 ; 20 ]./100;
-mic_z = [ 10 ; 10 ; 10 ; 10 ; 15 ; 15 ; 15 ; 15 ]./100;
+mic_x = [ 100 ; 200 ; 200 ; 100 ; 100 ; 200 ; 200 ; 100 ]./100;
+mic_y = [ 100 ; 100 ; 200 ; 200 ; 100 ; 100 ; 200 ; 200 ]./100;
+mic_z = [ 100 ; 100 ; 100 ; 100 ; 200 ; 200 ; 200 ; 200 ]./100;
 MicPos = [mic_x, mic_y, mic_z,];
 
 % ULA 30 mics %
-MicStart = [11, 10, 10]/100;
+MicStart = [110, 100, 100]/100;
 spacing = 0.02;
 for i = MicNum_TDOA+1:MicNum
     MicPos(i, :) = [MicStart(1, 1)+(i-(MicNum_TDOA+1))*spacing, MicStart(1, 2), MicStart(1, 3)];
 end
 
-SorPos = [17, 16, 13]/100;                            % source position (m)
-room_dim = [ 40, 30, 30]/100;                          % Room dimensions [x y z] (m)
+SorPos = [170, 180, 130]/100;                            % source position (m)
+room_dim = [ 300, 300, 250]/100;                          % Room dimensions [x y z] (m)
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-reverberation_time = 0.01;                                % Reverberation time (s)
-points_rir = 256;                                       % Number of rir points (需比 reverberation time 還長)
+reverberation_time = 0.1;                                % Reverberation time (s)
+points_rir = 1024;                                       % Number of rir points (需比 reverberation time 還長)
 look_mic = 18;
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 mtype = 'omnidirectional';                               % Type of microphone
@@ -59,11 +59,11 @@ title('空間圖')
 shg
 
 %% load ground-truth RIR (h) %%
-% 產生 RIR 和存.mat 檔 %
-h = rir_generator(c, fs, MicPos, SorPos, room_dim, reverberation_time, points_rir, mtype, order, dim, orientation, hp_filter);
-rir_filename_str = ['h\h_', string(reverberation_time), 'x', string(MicNum), 'x', string(points_rir), '.mat'];
-rir_filemane = join(rir_filename_str, '');
-save(rir_filemane, 'h')
+% % 產生 RIR 和存.mat 檔 %
+% h = rir_generator(c, fs, MicPos, SorPos, room_dim, reverberation_time, points_rir, mtype, order, dim, orientation, hp_filter);
+% rir_filename_str = ['h\h_', string(reverberation_time), 'x', string(MicNum), 'x', string(points_rir), '.mat'];
+% rir_filemane = join(rir_filename_str, '');
+% save(rir_filemane, 'h')
 
 rir_filename_str = ['h\h_', string(reverberation_time), 'x', string(MicNum), 'x', string(points_rir), '.mat'];
 rir_filemane = join(rir_filename_str, '');
