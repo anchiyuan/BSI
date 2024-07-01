@@ -14,24 +14,24 @@ c = 343;                                                 % Sound velocity (m/s)
 fs = 16000;                                              % Sample frequency (samples/s)
 
 % distributed 8 mic %
-mic_x = [ 100 ; 200 ; 200 ; 100 ; 100 ; 200 ; 200 ; 100 ]./100;
-mic_y = [ 100 ; 100 ; 200 ; 200 ; 100 ; 100 ; 200 ; 200 ]./100;
-mic_z = [ 100 ; 100 ; 100 ; 100 ; 200 ; 200 ; 200 ; 200 ]./100;
+mic_x = [ 15 ; 25 ; 25 ; 15 ; 15 ; 25 ; 25 ; 15 ]./100;
+mic_y = [ 25 ; 25 ; 35 ; 35 ; 25 ; 25 ; 35 ; 35 ]./100;
+mic_z = [ 15 ; 15 ; 15 ; 15 ; 25 ; 25 ; 25 ; 25 ]./100;
 MicPos = [mic_x, mic_y, mic_z,];
 
 % ULA 30 mics %
-MicStart = [110, 100, 100]/100;
+MicStart = [10, 10, 20]/100;
 spacing = 0.02;
 for i = MicNum_TDOA+1:MicNum
     MicPos(i, :) = [MicStart(1, 1)+(i-(MicNum_TDOA+1))*spacing, MicStart(1, 2), MicStart(1, 3)];
 end
 
-SorPos = [170, 180, 130]/100;                            % source position (m)
-room_dim = [ 300, 300, 250]/100;                          % Room dimensions [x y z] (m)
+SorPos = [20, 30, 20]/100;                            % source position (m)
+room_dim = [ 30, 40, 30]/100;                          % Room dimensions [x y z] (m)
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-reverberation_time = 0.1;                                % Reverberation time (s)
-points_rir = 1024;                                       % Number of rir points (需比 reverberation time 還長)
-look_mic = 18;
+reverberation_time = 0.01;                                % Reverberation time (s)
+points_rir = 256;                                       % Number of rir points (需比 reverberation time 還長)
+look_mic = 9;
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 mtype = 'omnidirectional';                               % Type of microphone
 order = -1;                                              % -1 equals maximum reflection order!
@@ -59,11 +59,11 @@ title('空間圖')
 shg
 
 %% load ground-truth RIR (h) %%
-% % 產生 RIR 和存.mat 檔 %
-% h = rir_generator(c, fs, MicPos, SorPos, room_dim, reverberation_time, points_rir, mtype, order, dim, orientation, hp_filter);
-% rir_filename_str = ['h\h_', string(reverberation_time), 'x', string(MicNum), 'x', string(points_rir), '.mat'];
-% rir_filemane = join(rir_filename_str, '');
-% save(rir_filemane, 'h')
+% 產生 RIR 和存.mat 檔 %
+h = rir_generator(c, fs, MicPos, SorPos, room_dim, reverberation_time, points_rir, mtype, order, dim, orientation, hp_filter);
+rir_filename_str = ['h\h_', string(reverberation_time), 'x', string(MicNum), 'x', string(points_rir), '.mat'];
+rir_filemane = join(rir_filename_str, '');
+save(rir_filemane, 'h')
 
 rir_filename_str = ['h\h_', string(reverberation_time), 'x', string(MicNum), 'x', string(points_rir), '.mat'];
 rir_filemane = join(rir_filename_str, '');
@@ -157,14 +157,14 @@ else
 end
 
 %% load y_wpe (y_wpe) %%
-% % do wpe %
-% y_wpe = wpe(y_nodelay.', 'wpe_parameter.m');
-% y_wpe = y_wpe.';
-% 
-% % 存 wpe mat %
-% y_wpe_filename_str = ['y\y_wpe_', string(reverberation_time), '.mat'];
-% y_wpe_filename = join(y_wpe_filename_str, '');
-% save(y_wpe_filename, 'y_wpe')
+% do wpe %
+y_wpe = wpe(y_nodelay.', 'wpe_parameter.m');
+y_wpe = y_wpe.';
+
+% 存 wpe mat %
+y_wpe_filename_str = ['y\y_wpe_', string(reverberation_time), '.mat'];
+y_wpe_filename = join(y_wpe_filename_str, '');
+save(y_wpe_filename, 'y_wpe')
 
 % load y_wpe %
 y_wpe_filename_str = ['y\y_wpe_', string(reverberation_time), '.mat'];
