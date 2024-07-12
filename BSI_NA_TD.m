@@ -13,7 +13,7 @@ fs = 16000;                                              % Sample frequency (sam
 Ts = 1/fs;                                               % Sample period (s)
 
 % ULA %
-MicStart = [1.18, 1, 1];
+MicStart = [0.1, 0.1, 0.2];
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 spacing = 0.02;
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -22,11 +22,11 @@ for i = 1:MicNum
     MicPos(i, :) = [MicStart(1, 1)+(i-1)*spacing, MicStart(1, 2), MicStart(1, 3)];
 end
 
-SorPos = [1.7, 1.8, 1.3];                                % source position (m)
-room_dim = [3, 3, 2.5];                              % Room dimensions [x y z] (m)
+SorPos = [0.2, 0.3, 0.2];                                % source position (m)
+room_dim = [0.3, 0.4, 0.3];                              % Room dimensions [x y z] (m)
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-reverberation_time = 0.1;                               % Reverberation time (s)
-points_rir = 1024;                                        % Number of rir points (需比 reverberation time 還長)
+reverberation_time = 0.01;                               % Reverberation time (s)
+points_rir = 256;                                        % Number of rir points (需比 reverberation time 還長)
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 mtype = 'omnidirectional';                               % Type of microphone
 order = -1;                                              % -1 equals maximum reflection order!
@@ -62,7 +62,7 @@ h = rir_generator(c, fs, MicPos, SorPos, room_dim, reverberation_time, points_ri
 % rir_filemane = join(rir_filename_str, '');
 % load(rir_filemane)
 
-look_mic = 6;
+look_mic = 1;
 h_yaxis_upperlimit = max(h(look_mic, :)) + 0.01;
 h_yaxis_underlimit = min(h(look_mic, :)) - 0.01;
 % 畫 ground-truth RIR time plot %
