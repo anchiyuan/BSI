@@ -30,7 +30,11 @@ for i = 1:size(algorithm, 2)
     subplot(size(algorithm, 2), 1, i);
     plot(h(9, :), 'r');
     hold on
-    plot(A_tdomain(look_mic(i), :), 'b-.');
+    if i == 1
+        plot(-A_tdomain(look_mic(i), :), 'b-.');
+    else
+        plot(A_tdomain(look_mic(i), :), 'b-.');
+    end
     hold off
     h_yaxis_upperlimit = max(h(9, :)) + 0.01;
     h_yaxis_underlimit = min(h(9, :)) - 0.01;
@@ -47,6 +51,7 @@ for i = 1:size(algorithm, 2)
     semilogx(linspace(0, fs/2, points_rir/2+1), 20*log10(abs(ATF_estimated(look_mic(i), 1:points_rir/2+1))), 'b-.');
     hold off
     xlim([200 8000])
+    xticks([200 1000 8000])
     title(al)
     legend('ground-truth ATF', 'estimated ATF')
     xlabel('frequency (Hz)')
@@ -58,6 +63,7 @@ for i = 1:size(algorithm, 2)
     semilogx(linspace(0, fs/2, points_rir/2+1), unwrap(angle(ATF_estimated(look_mic(i), 1:points_rir/2+1))), 'b-.');
     hold off
     xlim([200 8000])
+    xticks([200 1000 8000])
     title(al)
     legend('ground-truth ATF', 'estimated ATF')
     xlabel('frequency (Hz)')
